@@ -9,7 +9,7 @@ api.nopasaran.ch {
 
   # Gère automatiquement le HTTPS avec Let's Encrypt
   # !!! REMPLACEZ CECI PAR VOTRE VRAIE ADRESSE E-MAIL !!!
-  tls votre.email@example.com
+  tls rebel.suisse@gmail.com
 
   # Redirige tout le trafic vers le service 'strapi' sur le port 1337
   reverse_proxy strapi:1337
