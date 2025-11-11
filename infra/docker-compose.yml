@@ -64,7 +64,6 @@ services:
       - ./data/caddy:/data
       - ./data/caddy_config:/config
     depends_on:
-      - frontend
       - strapi
 
 networks:
