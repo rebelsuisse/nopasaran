@@ -1,0 +1,38 @@
+# =====================================================================
+#  API Backend (Strapi)
+#  Caddy gère le trafic pour api.nopasaran.ch et le redirige
+#  vers le conteneur Strapi qui tourne sur ce serveur.
+# =====================================================================
+api.nopasaran.ch {
+  # Active la compression pour des réponses plus rapides
+  encode gzip zstd
+
+  # Gère automatiquement le HTTPS avec Let's Encrypt
+  # !!! REMPLACEZ CECI PAR VOTRE VRAIE ADRESSE E-MAIL !!!
+  tls rebel.suisse@gmail.com
+
+  # Redirige tout le trafic vers le service 'strapi' sur le port 1337
+  reverse_proxy strapi:1337
+
+  # Ajoute des en-têtes de sécurité pour une meilleure protection
+  header {
+    # Force le HTTPS pour 1 an
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    # Empêche le clickjacking
+    X-Frame-Options "SAMEORIGIN"
+    # Contrôle la manière dont les informations de provenance sont envoyées
+    Referrer-Policy "strict-origin-when-cross-origin"
+    # Empêche le navigateur de deviner les types de contenu
+    X-Content-Type-Options "nosniff"
+  }
+}
+
+# =====================================================================
+#  Redirection WWW (BONNE PRATIQUE)
+#  Le trafic pour nopasaran.ch sera géré par Vercel, mais si quelqu'un
+#  pointe www.nopasaran.ch sur votre IP, Caddy saura quoi faire.
+# =====================================================================
+www.nopasaran.ch {
+  redir https://nopasaran.ch{uri}
+}
+
