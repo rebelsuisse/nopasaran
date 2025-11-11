@@ -1,5 +1,3 @@
-version: "3.9"
-
 name: ${PROJECT_NAME}
 
 services:
@@ -21,7 +19,7 @@ services:
 
   strapi:
     build:
-      context: ../backend
+      context: ../backend/strapi-backend
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
