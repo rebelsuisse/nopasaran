@@ -1,0 +1,35 @@
+# Fichier .gitignore à la racine du projet
+
+# --- Fichiers système ---
+.DS_Store
+*.swp
+*.swo
+
+# --- Dépendances et Caches ---
+# Ignorer les node_modules partout
+**/node_modules
+**/.next
+**/.cache
+**/.strapi
+
+# --- Fichiers d'environnement ---
+# Ignorer tous les fichiers .env, où qu'ils soient
+**/.env
+**/.env.local
+**/.env.production
+**/.env.version
+
+# --- Données de l'Infrastructure Docker ---
+# Ignorer tout le contenu du dossier 'data' dans 'infra'
+# C'est la ligne la plus importante pour votre problème actuel.
+infra/data/
+
+# --- Dossier de Sauvegardes ---
+# Ignorer le dossier qui contient toutes vos sauvegardes
+backups/media*
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
