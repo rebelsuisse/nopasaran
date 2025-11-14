@@ -18,6 +18,7 @@
 **/.env.local
 **/.env.production
 **/.env.version
+**/.env_bck
 
 # --- Données de l'Infrastructure Docker ---
 # Ignorer tout le contenu du dossier 'data' dans 'infra'
