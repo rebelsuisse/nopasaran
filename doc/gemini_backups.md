@@ -27,7 +27,7 @@ Cette commande va se connecter à votre conteneur PostgreSQL et exécuter `pg_du
     cd ~/nopasaran/infra
 
     # La commande magique
-    docker exec -t nopasaran-db-1 pg_dump -U ${POSTGRES_USER} -d ${POSTGRES_DB} > ~/backups/backup_$(date +%Y-%m-%d_%H-%M-%S).sql
+    docker exec -t nopasaran-db-1 pg_dump -U $(grep POSTGRES_USER .env | cut -d '=' -f2) -d $(grep POSTGRES_DB .env | cut -d '=' -f2) > ../backups/backup_$(date +%Y-%m-%d_%H-%M-%S).sql
     ```
 
 **Décortiquons cette commande :**
