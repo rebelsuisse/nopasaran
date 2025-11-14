@@ -29,6 +29,10 @@ Cette commande va se connecter à votre conteneur PostgreSQL et exécuter `pg_du
     # La commande magique
     docker exec -t nopasaran-db-1 pg_dump -U $(grep POSTGRES_USER .env | cut -d '=' -f2) -d $(grep POSTGRES_DB .env | cut -d '=' -f2) > ../backups/backup_$(date +%Y-%m-%d_%H-%M-%S).sql
     ```
+4. **Sauvegarde des mdias (images) :**
+   ```bash
+   tar -czvf ../backups/media_backup_$(date +%Y-%m-%d_%H-%M-%S).tar.gz -C /home/gregb/nopasaran/infra/data uploads
+   ```
 
 **Décortiquons cette commande :**
 *   `docker exec -t nopasaran-db-1` : Dit à Docker "exécute la commande suivante à l'intérieur du conteneur `nopasaran-db-1`".
