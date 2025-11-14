@@ -1,0 +1,2 @@
+#!/bin/bash
+docker exec -t nopasaran-db-1 pg_dump -U $(grep POSTGRES_USER .env | cut -d '=' -f2) -d $(grep POSTGRES_DB .env | cut -d '=' -f2) > ../backups/backup_$(date +%Y-%m-%d_%H-%M-%S).sql
