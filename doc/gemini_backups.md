@@ -31,7 +31,7 @@ Cette commande va se connecter à votre conteneur PostgreSQL et exécuter `pg_du
     ```
 4. **Sauvegarde des mdias (images) :**
    ```bash
-   tar -czvf ../backups/media_backup_$(date +%Y-%m-%d_%H-%M-%S).tar.gz -C /home/gregb/nopasaran/infra/data uploads
+   tar -czvf ../backups/media_backup_$(date +%Y-%m-%d_%H-%M-%S).tar.gz -C /home/devadmin/nopasaran/infra/data uploads
    ```
 
 **Décortiquons cette commande :**
