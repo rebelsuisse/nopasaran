@@ -25,6 +25,8 @@
 # C'est la ligne la plus importante pour votre problème actuel.
 infra/data/
 
+backups/
+
 # --- Dossier de Sauvegardes ---
 # Ignorer le dossier qui contient toutes vos sauvegardes
 backups/media*
