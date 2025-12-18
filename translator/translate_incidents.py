@@ -1,18 +1,27 @@
 import requests
 import time
-from deep_translator import GoogleTranslator
+import os
+import deepl
+from slugify import slugify
+from dotenv import load_dotenv
 
-# --- CONFIGURATION ---
-# L'URL de votre API (en local pour tester, ou la prod https://api.nopasaran.ch)
-API_URL = "http://localhost:1337/api" 
-# Le Token que vous venez de créer dans Strapi
-API_TOKEN = "8717f7b186be6ec5b7191ec531e6ee8a19af94fcc3dccea49d1bb5f34e13c3e5009240215ec002ec4ef0ecf11ad61ec76d50f5b8c2b8f568c93b23e379c0e7567ebabfcc3ae50bd02faed61bb46f6b4929ad5449c63193bcacf686317b9d8cc2a24f70e36dd1be1cc1e2c1999275780ae6e950ffff761081a6027b4158cb97cb"
+load_dotenv()
 
-# Les langues
+API_URL = "https://api.nopasaran.ch/api" 
+
+API_TOKEN = os.getenv("STRAPI_API_TOKEN")
+DEEPL_AUTH_KEY = os.getenv("DEEPL_AUTH_KEY")
+if not API_TOKEN or not DEEPL_AUTH_KEY:
+    print("❌ ERREUR : Les tokens sont manquants. Vérifiez votre fichier .env")
+    exit(1)
+
+# Initialisation du traducteur DeepL
+translator = deepl.Translator(DEEPL_AUTH_KEY)
+
+MAX_TRANSLATIONS = 1
+
 SOURCE_LOCALE = "fr-CH"
 TARGET_LOCALE = "it-CH"
-
-# Le nom de la collection (au pluriel, comme dans l'URL)
 COLLECTION_NAME = "the-wall-of-shames"
 
 # Headers pour l'authentification Strapi
@@ -22,90 +31,133 @@ headers = {
 }
 
 def translate_text(text):
-    """Fonction qui appelle le service de traduction"""
+    """Fonction qui appelle l'API DeepL"""
     if not text or len(text) < 2:
         return text
     try:
-        # On utilise Google Translate via deep-translator (gratuit)
-        # Pour une meilleure qualité, on pourrait utiliser l'API DeepL ici
-        return GoogleTranslator(source='fr', target='it').translate(text)
+        # DeepL détecte la source automatiquement, mais on force le Français pour être sûr
+        # target_lang="IT" pour Italien
+        result = translator.translate_text(text, source_lang="FR", target_lang="IT")
+        return result.text
     except Exception as e:
-        print(f"Erreur de traduction: {e}")
+        print(f"❌ Erreur de traduction DeepL: {e}")
         return text
 
 def get_incidents():
-    """Récupère tous les incidents en français avec leurs localisations existantes"""
-    print("📥 Récupération des incidents...")
-    # On récupère la locale FR et on peuple 'localizations' pour voir si l'italien existe déjà
-    # On met un grand pageSize pour tout avoir
-    url = f"{API_URL}/{COLLECTION_NAME}?locale={SOURCE_LOCALE}&populate=localizations&pagination[pageSize]=1000"
-    
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()['data']
-    else:
-        print(f"Erreur API: {response.status_code} - {response.text}")
+    print("📥 Récupération des incidents complets (avec relations)...")
+    # CHANGEMENT ICI : populate=* pour tout récupérer (sujet, images, sources)
+    url = f"{API_URL}/{COLLECTION_NAME}?locale={SOURCE_LOCALE}&populate=*&pagination[pageSize]=1000"
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json()['data']
+        else:
+            print(f"❌ Erreur API Strapi (Get): {response.status_code} - {response.text}")
+            return []
+    except Exception as e:
+        print(f"❌ Erreur de connexion: {e}")
         return []
 
-def create_localization(incident_id, translated_data):
-    """Crée la version italienne pour un incident donné"""
-    url = f"{API_URL}/{COLLECTION_NAME}/{incident_id}/localizations"
+def create_localization(document_id, translated_data):
+    # On utilise PUT avec ?locale=it-CH pour créer/mettre à jour la loc
+    url = f"{API_URL}/{COLLECTION_NAME}/{document_id}?locale={TARGET_LOCALE}"
     
-    payload = {
-        "targetLocale": TARGET_LOCALE,
-        # Strapi attend les données directement ou dans 'data' selon les versions,
-        # Pour la création de loc, c'est souvent à la racine du body
-        **translated_data
-    }
-
-    response = requests.post(url, headers=headers, json=payload)
+    payload = { "data": translated_data }
     
-    if response.status_code == 200:
-        print(f"✅ Traduction créée pour l'ID {incident_id}")
-    else:
-        print(f"❌ Erreur création ID {incident_id}: {response.text}")
+    try:
+        response = requests.put(url, headers=headers, json=payload)
+        if response.status_code == 200:
+            print(f"✅ Traduction créée pour DocumentID {document_id}")
+            return True
+        else:
+            print(f"❌ Erreur Strapi ID {document_id}: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+         print(f"❌ Erreur connexion: {e}")
+         return False    
 
 def main():
+    # Vérification du crédit DeepL au démarrage (Optionnel mais pratique)
+    try:
+        usage = translator.get_usage()
+        if usage.character.limit:
+            print(f"ℹ️ Crédit DeepL: {usage.character.count} / {usage.character.limit} caractères utilisés.")
+    except:
+        pass
+
     incidents = get_incidents()
-    print(f"Trouvé {len(incidents)} incidents en {SOURCE_LOCALE}.")
+    print(f"🔎 Trouvé {len(incidents)} incidents en {SOURCE_LOCALE}.")
+
+    processed_count = 0
 
     for incident in incidents:
-        # 1. Vérifier si la traduction existe déjà
-        existing_locales = [loc['locale'] for loc in incident['localizations']]
-        
+        if processed_count >= MAX_TRANSLATIONS:
+            print(f"🛑 Limite de {MAX_TRANSLATIONS} traductions atteinte. Arrêt du script.")
+            break
+
+        # Vérifier si la traduction existe déjà
+        existing_locales = [loc['locale'] for loc in incident.get('localizations', [])]
         if TARGET_LOCALE in existing_locales:
-            print(f"⏩ ID {incident['id']} : Déjà traduit en {TARGET_LOCALE}. On passe.")
             continue
 
-        print(f"🔄 Traduction en cours pour ID {incident['id']} : {incident['title']}...")
+        print(f"🔄 Traduction ({processed_count + 1}/{MAX_TRANSLATIONS}) pour '{incident['title']}'...")
 
-        # 2. Préparer les données à traduire
-        # Attention : Ne traduisez pas le 'slug' automatiquement, ou alors nettoyez-le bien
-        # Ici on garde le slug français ou on ajoute -it
+        sujet_doc_id = incident.get('sujet', {}).get('documentId') if incident.get('sujet') else None
+
+        # B. IMAGES (Media)
+        # On récupère les IDs numériques des images
+        evidence_images_ids = []
+        if incident.get('evidence_image'):
+            # Strapi renvoie parfois un objet seul ou une liste
+            imgs = incident['evidence_image']
+            if isinstance(imgs, list):
+                evidence_images_ids = [img['id'] for img in imgs]
+            elif isinstance(imgs, dict):
+                evidence_images_ids = [imgs['id']]
+
+        # C. SOURCES (Component)
+        # On doit nettoyer les IDs internes des composants pour les dupliquer
+        sources_clean = []
+        if incident.get('sources'):
+            for source in incident['sources']:
+                new_source = source.copy()
+                if 'id' in new_source: del new_source['id'] # On retire l'ID pour créer une copie
+                sources_clean.append(new_source)
+
+        # --- 2. TRADUCTION & CONSTRUCTION ---
         
+        italian_title = translate_text(incident['title'])
+        italian_slug = slugify(italian_title)
+
         translated_data = {
-            "title": translate_text(incident['title']),
+            "title": italian_title,
+            "slug": italian_slug,
+            
             "description": translate_text(incident['description']),
             "consequence": translate_text(incident['consequence']),
             "subject_role": translate_text(incident['subject_role']),
-            # On copie les champs qui ne changent pas (relation, date, etc.)
+            
+            # Copie des champs simples
             "incident_date": incident['incident_date'],
             "incident_location": incident['incident_location'],
             "category": incident['category'],
-            # "slug": f"{incident['slug']}-it", # Optionnel : suffixer le slug
-            "slug": incident['slug'], # Strapi gère souvent l'unicité par locale, donc même slug c'est OK
-            # Pour les relations (Sujet), Strapi v5 les lie parfois automatiquement lors de la localisation,
-            # sinon il faut passer l'ID du sujet.
-            # Dans la plupart des cas, create localization copie les relations non-internationalisées.
+            "visible": incident['visible'],
+            
+            # --- RÉINJECTION DES RELATIONS ---
+            "sujet": sujet_doc_id,          # On lie le même sujet
+            "evidence_image": evidence_images_ids, # On lie les mêmes images
+            "sources": sources_clean,       # On copie les sources
+            
+            # --- FORCER LE BROUILLON ---
+            "publishedAt": None, 
         }
 
-        print(f"🔄 Translated data: {translated_data}")
-
-        # 3. Envoyer à Strapi
-        # create_localization(incident['id'], translated_data)
+        # 3. ENVOI
+        success = create_localization(incident['documentId'], translated_data)
         
-        # Petite pause pour être gentil avec l'API de traduction
-        time.sleep(1)
+        if success:
+            processed_count += 1
+            time.sleep(0.5)
 
 if __name__ == "__main__":
     main()
