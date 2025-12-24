@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- 1. CONFIGURATION DES LANGUES ---
 LANG_CONFIG = {
     "it": {
         "strapi": "it-CH",
@@ -24,6 +25,7 @@ LANG_CONFIG = {
     }
 }
 
+# --- CONFIGURATION GLOBALE ---
 API_URL = "https://api.nopasaran.ch/api"
 API_TOKEN = os.getenv("STRAPI_API_TOKEN")
 DEEPL_AUTH_KEY = os.getenv("DEEPL_AUTH_KEY")
@@ -32,7 +34,7 @@ if not API_TOKEN or not DEEPL_AUTH_KEY:
     print("❌ ERREUR : Les tokens sont manquants dans le fichier .env")
     sys.exit(1)
 
-MAX_TRANSLATIONS = 1
+MAX_TRANSLATIONS = 6
 SOURCE_LOCALE = "fr-CH"
 COLLECTION_NAME = "the-wall-of-shames"
 
@@ -91,7 +93,7 @@ def create_localization(document_id, translated_data, target_locale):
     try:
         response = requests.put(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print(f"✅ Traduction créée pour DocumentID {document_id}")
+            print(f"   ✅ Traduction créée pour DocumentID {document_id}")
             return True
         else:
             print(f"❌ Erreur Strapi ID {document_id}: {response.text}")
@@ -113,6 +115,7 @@ def main():
 
     print(f"🚀 Démarrage : Traduction FR -> {args.lang.upper()} (Strapi: {TARGET_LOCALE})")
 
+    # --- LE SCRIPT ---
     incidents = get_incidents()
     print(f"🔎 Trouvé {len(incidents)} incidents source.")
     
@@ -129,7 +132,7 @@ def main():
         if TARGET_LOCALE in existing_locales:
             continue
 
-        print(f"🔄 Traduction ({processed_count + 1}/{MAX_TRANSLATIONS}) : '{incident['title']}'...")
+        print(f"🔄 Traduction ({processed_count + 1}/{MAX_TRANSLATIONS}) : '{incident['title']}'")
 
         # --- PRÉPARATION RELATIONS ---
         sujet_doc_id = incident.get('sujet', {}).get('documentId') if incident.get('sujet') else None
@@ -149,12 +152,14 @@ def main():
                 if 'id' in new_source: del new_source['id']
                 sources_clean.append(new_source)
 
-        italian_title = translate_text(incident['title'], DEEPL_CODE)
-        italian_slug = slugify(italian_title)
+        translated_title = translate_text(incident['title'], DEEPL_CODE)
+        translated_slug = slugify(translated_title)
+
+        print(f"   ↳ Titre traduit ({args.lang.upper()}) : '{translated_title}'")
 
         translated_data = {
-            "title": italian_title,
-            "slug": italian_slug,
+            "title": translated_title,
+            "slug": translated_slug,
             "description": translate_text(incident['description'], DEEPL_CODE),
             "consequence": translate_text(incident['consequence'], DEEPL_CODE),
             "subject_role": translate_text(incident['subject_role'], DEEPL_CODE),
