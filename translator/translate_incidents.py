@@ -3,7 +3,6 @@ import time
 import deepl
 import os
 import sys
-import argparse
 from slugify import slugify
 from dotenv import load_dotenv
 
@@ -34,7 +33,7 @@ if not API_TOKEN or not DEEPL_AUTH_KEY:
     print("❌ ERREUR : Les tokens sont manquants dans le fichier .env")
     sys.exit(1)
 
-MAX_TRANSLATIONS = 6
+MAX_TRANSLATIONS_PER_LANG = 5  # Limite par langue pour éviter de tout cramer
 SOURCE_LOCALE = "fr-CH"
 COLLECTION_NAME = "the-wall-of-shames"
 
@@ -66,7 +65,8 @@ def get_incidents():
         if response.status_code == 200:
             return response.json()['data']
         return []
-    except Exception:
+    except Exception as e:
+        print(f"❌ Erreur récupération incidents: {e}")
         return []
 
 def force_unpublish(document_id, target_locale):
@@ -102,37 +102,26 @@ def create_localization(document_id, translated_data, target_locale):
          print(f"❌ Erreur connexion: {e}")
          return False
 
-def main():
-    # --- GESTION DES ARGUMENTS ---
-    parser = argparse.ArgumentParser(description="Traduction automatique Strapi via DeepL")
-    parser.add_argument("lang", help="Langue cible (it, de, en)", choices=LANG_CONFIG.keys())
-    args = parser.parse_args()
-
-    # Configuration choisie
-    target_config = LANG_CONFIG[args.lang]
-    TARGET_LOCALE = target_config["strapi"]
-    DEEPL_CODE = target_config["deepl"]
-
-    print(f"🚀 Démarrage : Traduction FR -> {args.lang.upper()} (Strapi: {TARGET_LOCALE})")
-
-    # --- LE SCRIPT ---
-    incidents = get_incidents()
-    print(f"🔎 Trouvé {len(incidents)} incidents source.")
+def process_language(lang_key, config, incidents):
+    """Traite une langue spécifique"""
+    target_locale = config["strapi"]
+    deepl_code = config["deepl"]
+    
+    print(f"\n🚀 Démarrage : Traduction FR -> {lang_key.upper()} (Strapi: {target_locale})")
     
     processed_count = 0
 
     for incident in incidents:
-        if processed_count >= MAX_TRANSLATIONS:
-            print(f"🛑 Limite de {MAX_TRANSLATIONS} traductions atteinte.")
+        if processed_count >= MAX_TRANSLATIONS_PER_LANG:
+            print(f"🛑 Limite de {MAX_TRANSLATIONS_PER_LANG} traductions atteinte pour {lang_key.upper()}.")
             break
 
+        # Vérification si déjà traduit
         existing_locales = [loc['locale'] for loc in incident.get('localizations', [])]
-        
-        # On saute si la langue cible existe déjà
-        if TARGET_LOCALE in existing_locales:
+        if target_locale in existing_locales:
             continue
 
-        print(f"🔄 Traduction ({processed_count + 1}/{MAX_TRANSLATIONS}) : '{incident['title']}'")
+        print(f"🔄 Traduction ({processed_count + 1}/{MAX_TRANSLATIONS_PER_LANG}) : '{incident['title']}'")
 
         # --- PRÉPARATION RELATIONS ---
         sujet_doc_id = incident.get('sujet', {}).get('documentId') if incident.get('sujet') else None
@@ -152,17 +141,18 @@ def main():
                 if 'id' in new_source: del new_source['id']
                 sources_clean.append(new_source)
 
-        translated_title = translate_text(incident['title'], DEEPL_CODE)
+        # --- TRADUCTION ---
+        translated_title = translate_text(incident['title'], deepl_code)
         translated_slug = slugify(translated_title)
 
-        print(f"   ↳ Titre traduit ({args.lang.upper()}) : '{translated_title}'")
+        print(f"   ↳ Titre traduit ({lang_key.upper()}) : '{translated_title}'")
 
         translated_data = {
             "title": translated_title,
             "slug": translated_slug,
-            "description": translate_text(incident['description'], DEEPL_CODE),
-            "consequence": translate_text(incident['consequence'], DEEPL_CODE),
-            "subject_role": translate_text(incident['subject_role'], DEEPL_CODE),
+            "description": translate_text(incident['description'], deepl_code),
+            "consequence": translate_text(incident['consequence'], deepl_code),
+            "subject_role": translate_text(incident['subject_role'], deepl_code),
             
             # Champs fixes
             "incident_date": incident['incident_date'],
@@ -176,12 +166,26 @@ def main():
         }
 
         # --- ENVOI ---
-        success = create_localization(incident['documentId'], translated_data, TARGET_LOCALE)
+        success = create_localization(incident['documentId'], translated_data, target_locale)
         
         if success:
-            # force_unpublish(incident['documentId'], TARGET_LOCALE)
+            # Optionnel : décommenter si vous voulez forcer le brouillon
+            # force_unpublish(incident['documentId'], target_locale)
             processed_count += 1
             time.sleep(0.5)
+
+def main():
+    # 1. Récupération unique des incidents source
+    all_incidents = get_incidents()
+    print(f"🔎 Trouvé {len(all_incidents)} incidents source.")
+
+    # 2. Boucle sur toutes les langues configurées
+    for lang_key, config in LANG_CONFIG.items():
+        process_language(lang_key, config, all_incidents)
+        print(f"✅ Fin du traitement pour {lang_key.upper()}.")
+        time.sleep(1) # Petite pause entre les langues
+
+    print("\n🎉 Toutes les langues ont été traitées.")
 
 if __name__ == "__main__":
     main()
