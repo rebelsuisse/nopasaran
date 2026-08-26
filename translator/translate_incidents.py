@@ -1,3 +1,4 @@
+import re
 import requests
 import time
 import deepl
@@ -16,12 +17,31 @@ LANG_CONFIG = {
     },
     "de": {
         "strapi": "de-CH",
-        "deepl": "DE"
+        "deepl": "DE-CH"
     },
     "en": {
         "strapi": "en",
         "deepl": "EN-US"
     }
+}
+
+
+# --- 2. POST-TRAITEMENT SUISSE (filet de sécurité) ---
+def swissify_de(text):
+    """DeepL DE-CH applique déjà les règles suisses (ss, guillemets «»).
+    On repasse derrière au cas où un segment garderait la norme allemande."""
+    if not text:
+        return text
+    # L'eszett n'existe pas en Suisse : toujours "ss"
+    text = text.replace("ß", "ss").replace("ẞ", "SS")
+    # Guillemets allemands „ ” et ‚ ’ -> guillemets suisses « » et ‹ ›
+    text = re.sub("„([^“”]*)[“”]", "«\\1»", text)
+    text = re.sub("‚([^‘’]*)[‘’]", "‹\\1›", text)
+    return text
+
+
+POSTPROCESS = {
+    "de": swissify_de,
 }
 
 # --- CONFIGURATION GLOBALE ---
@@ -44,7 +64,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
-def translate_text(text, target_lang_deepl):
+def translate_text(text, target_lang_deepl, lang_key=None):
     if not text or len(text) < 2: return text
     try:
         result = translator.translate_text(
@@ -52,7 +72,8 @@ def translate_text(text, target_lang_deepl):
             source_lang="FR", 
             target_lang=target_lang_deepl
         )
-        return result.text
+        cleaner = POSTPROCESS.get(lang_key)
+        return cleaner(result.text) if cleaner else result.text
     except Exception as e:
         print(f"❌ Erreur DeepL: {e}")
         return text
@@ -142,7 +163,7 @@ def process_language(lang_key, config, incidents):
                 sources_clean.append(new_source)
 
         # --- TRADUCTION ---
-        translated_title = translate_text(incident['title'], deepl_code)
+        translated_title = translate_text(incident['title'], deepl_code, lang_key)
         translated_slug = slugify(translated_title)
 
         print(f"   ↳ Titre traduit ({lang_key.upper()}) : '{translated_title}'")
@@ -150,9 +171,9 @@ def process_language(lang_key, config, incidents):
         translated_data = {
             "title": translated_title,
             "slug": translated_slug,
-            "description": translate_text(incident['description'], deepl_code),
-            "consequence": translate_text(incident['consequence'], deepl_code),
-            "subject_role": translate_text(incident['subject_role'], deepl_code),
+            "description": translate_text(incident['description'], deepl_code, lang_key),
+            "consequence": translate_text(incident['consequence'], deepl_code, lang_key),
+            "subject_role": translate_text(incident['subject_role'], deepl_code, lang_key),
             
             # Champs fixes
             "incident_date": incident['incident_date'],
